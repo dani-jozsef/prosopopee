@@ -18,7 +18,6 @@ from jinja2 import Environment, FileSystemLoader
 
 from .cache import CACHE
 from .utils import encrypt, rfc822, load_settings, CustomFormatter
-from .autogen import autogen
 from .__init__ import __version__
 
 
@@ -56,27 +55,6 @@ parser_preview.add_argument(
 )
 
 subparser.add_parser("deploy", help="Deploy your website")
-parser_autogen = subparser.add_parser("autogen", help="Generate gallery automaticaly")
-group = parser_autogen.add_mutually_exclusive_group(required=True)
-group.add_argument(
-    "-d",
-    dest="folder",
-    metavar="folder",
-    help="folder to use for automatic gallery generation",
-)
-group.add_argument(
-    "--all",
-    action="store_const",
-    const=None,
-    dest="folder",
-    help="find all folders with settings.yaml for automatic gallery generation",
-)
-parser_autogen.add_argument(
-    "--force",
-    action="store_true",
-    help="**DESTRUCTIVE** force regeneration of gallery even if sections are already defined.",
-)
-
 
 DEFAULTS = {
     "rss": True,
@@ -547,13 +525,13 @@ def process_directory(
     Path("build").joinpath(gallery_path).makedirs_p()
 
     if not gallery_settings.get("public", True):
-        build_gallery(settings, gallery_settings, gallery_path, parent_templates)
+        build_gallery(settings, gallery_settings, gallery_path, gallery_path, parent_templates)
         return gallery_cover
 
     gallery_cover = create_cover(gallery_name, gallery_settings, gallery_path)
 
     if not sub_galleries:
-        build_gallery(settings, gallery_settings, gallery_path, parent_templates)
+        build_gallery(settings, gallery_settings, gallery_path, gallery_path, parent_templates)
         return gallery_cover
 
     if gallery_settings.get("sections", False):
@@ -632,7 +610,7 @@ def create_cover(gallery_name, gallery_settings, gallery_path):
     return gallery_cover
 
 
-def __build_gallery(
+def build_gallery(
     settings, gallery_settings, gallery_path, target_gallery_path, template
 ):
     gallery_index_template = template.get_template("gallery-index.html")
@@ -677,27 +655,6 @@ def __build_gallery(
         open(Path("build").joinpath(target_gallery_path, "index.html"), "wb").write(
             html
         )
-
-
-def build_gallery(settings, gallery_settings, gallery_path, template):
-    __build_gallery(settings, gallery_settings, gallery_path, gallery_path, template)
-
-    if not gallery_settings.get("light_mode", False) and (
-        not settings["settings"].get("light_mode", False)
-        or gallery_settings.get("light_mode")
-    ):
-        return
-
-    Path("build").joinpath(gallery_path, "light").makedirs_p()
-    gallery_light_path = Path(gallery_path).joinpath("light")
-    light_templates = get_gallery_templates(
-        "light", gallery_light_path, date_locale=settings["settings"].get("date_locale")
-    )
-
-    __build_gallery(
-        settings, gallery_settings, gallery_path, gallery_light_path, light_templates
-    )
-
 
 def build_index(
     settings,
@@ -839,20 +796,21 @@ def main():
         d = shutil.copy2(i, dstdir)
         logging.warning("copied %s", d)
 
-    if settings["rss"]:
-        feed_template = templates.get_template("feed.xml")
+    # #FIXME if we recurse through folders this won't work this way 
+    # if settings["rss"]:
+    #     feed_template = templates.get_template("feed.xml")
 
-        xml = feed_template.render(
-            settings=settings,
-            galleries=reversed(
-                sorted(
-                    [x for x in front_page_galleries_cover if x != {}],
-                    key=lambda x: x["gallery_path"],
-                )
-            ),
-        ).encode("Utf-8")
+    #     xml = feed_template.render(
+    #         settings=settings,
+    #         galleries=reversed(
+    #             sorted(
+    #                 [x for x in front_page_galleries_cover if x != {}],
+    #                 key=lambda x: x["gallery_path"],
+    #             )
+    #         ),
+    #     ).encode("Utf-8")
 
-        open(Path("build").joinpath("feed.xml"), "wb").write(xml)
+    #     open(Path("build").joinpath("feed.xml"), "wb").write(xml)
 
     CACHE.cache_dump()
 
