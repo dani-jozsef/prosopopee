@@ -82,7 +82,7 @@ DEFAULTS = {
     "rss": True,
     "share": False,
     "settings": {},
-    "show_date": True,
+    "show_date": False,
     "test": False,
     "include": [],
 }
@@ -627,6 +627,7 @@ def create_cover(gallery_name, gallery_settings, gallery_path):
         "tags": gallery_settings.get("tags", ""),
         "cover_type": cover_image_type,
         "cover": cover_image_url,
+        "gallery_path": gallery_path
     }
     return gallery_cover
 
@@ -713,11 +714,11 @@ def build_index(
     )
     if reverse:
         galleries_cover = sorted(
-            [x for x in galleries_cover if x != {}], key=lambda x: x["date"]
+            [x for x in galleries_cover if x != {}], key=lambda x: x["gallery_path"]
         )
     else:
         galleries_cover = reversed(
-            sorted([x for x in galleries_cover if x != {}], key=lambda x: x["date"])
+            sorted([x for x in galleries_cover if x != {}], key=lambda x: x["gallery_path"])
         )
 
     # this should probably be a factory
@@ -761,14 +762,6 @@ def main():
         x for x in Path(".").listdir() if x.joinpath("settings.yaml").exists()
     ]
     includes = [x for x in settings["include"] if Path(".").joinpath(x).exists()]
-
-    if not galleries_dirs:
-        logging.error(
-            "I can't find at least one directory with a settings.yaml in the current "
-            "working directory (NOT the settings.yaml in your current directory, but one "
-            "INSIDE A DIRECTORY in your current directory), you don't have any gallery?"
-        )
-        sys.exit(1)
 
     if args.cmd == "test":
         DEFAULTS["test"] = True
@@ -820,10 +813,6 @@ def main():
             sys.exit(1)
         return
 
-    if args.cmd == "autogen":
-        autogen(args.folder, args.force)
-        return
-
     Path("build").makedirs_p()
     theme = settings["settings"].get("theme", "exposure")
     date_locale = settings["settings"].get("date_locale")
@@ -840,10 +829,7 @@ def main():
         )
         settings["custom_css"] = True
 
-    for gallery in galleries_dirs:
-        front_page_galleries_cover.append(
-            process_directory(gallery.normpath(), settings, templates)
-        )
+    process_directory(Path("."), settings, templates)
 
     for i in includes:
         srcdir = Path(i).dirname()
@@ -851,7 +837,7 @@ def main():
         if srcdir != "":
             os.makedirs(dstdir, exist_ok=True)
         d = shutil.copy2(i, dstdir)
-        logging.warning("copied", d)
+        logging.warning("copied %s", d)
 
     if settings["rss"]:
         feed_template = templates.get_template("feed.xml")
@@ -861,14 +847,13 @@ def main():
             galleries=reversed(
                 sorted(
                     [x for x in front_page_galleries_cover if x != {}],
-                    key=lambda x: x["date"],
+                    key=lambda x: x["gallery_path"],
                 )
             ),
         ).encode("Utf-8")
 
         open(Path("build").joinpath("feed.xml"), "wb").write(xml)
 
-    build_index(settings, front_page_galleries_cover, templates)
     CACHE.cache_dump()
 
     if DEFAULTS["test"] is True:
